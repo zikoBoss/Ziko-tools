@@ -203,7 +203,7 @@ LOGIN_TEMPLATE = """
 <body>
     <div class="login-card">
         <div class="welcome-text">
-            <h1>⚡️Ziko-Advanced⚡️</h1>
+            <h1>⚡️Advanced⚡️</h1>
             <p>{{ team_name }}</p>
         </div>
         
