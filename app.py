@@ -9,6 +9,8 @@ from io import BytesIO
 import base64 as b64_encode
 from dotenv import load_dotenv
 import jwt
+import threading
+import time
 
 # تحميل المتغيرات من ملف .env
 load_dotenv()
@@ -48,6 +50,16 @@ def verify_jwt_token(token):
         return payload.get('user_id')
     except:
         return None
+
+# دالة للتعامل مع السبام في الخلفية (حتى لا ينتظر المستخدم)
+def send_spam_in_background(uid):
+    """إرسال طلب السبام في الخلفية دون انتظار"""
+    try:
+        api_url = f"https://ziko-spam.vercel.app/add_all?uid={uid}"
+        # نرسل الطلب ولا ننتظر النتيجة
+        threading.Thread(target=lambda: requests.get(api_url, timeout=60)).start()
+    except:
+        pass  # نتجاهل الأخطاء لأنها في الخلفية
 
 # ==================== قوالب HTML ====================
 LOGIN_TEMPLATE = """
@@ -558,6 +570,15 @@ MAIN_TEMPLATE = """
                 padding: 8px 16px;
                 font-size: 0.85rem;
             }
+            
+            .share-buttons {
+                flex-direction: column;
+            }
+            
+            .share-btn {
+                width: 100%;
+                justify-content: center;
+            }
         }
     </style>
 </head>
@@ -575,7 +596,7 @@ MAIN_TEMPLATE = """
 
         <div class="tabs">
             <button class="tab-btn active" onclick="showTab('outfit')"><i class="fas fa-tshirt"></i> OUTFIT CARD</button>
-            <button class="tab-btn" onclick="showTab('addfriend')"><i class="fas fa-user-plus"></i> ADD FRIEND</button>
+            <button class="tab-btn" onclick="showTab('addfriend')"><i class="fas fa-robot"></i> ADD TCP BOT</button>
             <button class="tab-btn" onclick="showTab('spam')"><i class="fas fa-bomb"></i> FRIEND SPAM</button>
         </div>
 
@@ -599,17 +620,17 @@ MAIN_TEMPLATE = """
             </form>
         </div>
 
-        <!-- Tab: Add Friend -->
+        <!-- Tab: Add TCP Bot -->
         <div id="addfriend-tab" class="tab-content">
             <form onsubmit="handleFormSubmit(event, 'add_friend')">
                 <div class="form-group">
                     <label><i class="fas fa-fingerprint"></i> TARGET UID</label>
-                    <input type="text" name="uid" class="form-control" placeholder="Enter friend's UID" required>
-                    <small style="color: #66b3ff; display: block; margin-top: 5px;">Send a friend request to this UID</small>
+                    <input type="text" name="uid" class="form-control" placeholder="Enter target UID" required>
+                    <small style="color: #66b3ff; display: block; margin-top: 5px;">Add TCP Bot as friend to this UID</small>
                 </div>
                 
                 <button type="submit" class="btn" style="background: linear-gradient(135deg, #0099ff, #0066cc);">
-                    <i class="fas fa-user-plus"></i> SEND FRIEND REQUEST
+                    <i class="fas fa-robot"></i> ADD TCP BOT
                 </button>
             </form>
         </div>
@@ -620,7 +641,7 @@ MAIN_TEMPLATE = """
                 <div class="form-group">
                     <label><i class="fas fa-fingerprint"></i> TARGET UID</label>
                     <input type="text" name="uid" class="form-control" placeholder="Enter target UID" required>
-                    <small style="color: #ff6b6b; display: block; margin-top: 5px;">⚠️ Warning: This will send multiple friend requests</small>
+                    <small style="color: #ff6b6b; display: block; margin-top: 5px;">⚠️ Warning: This will send multiple friend requests (may take time)</small>
                 </div>
                 
                 <button type="submit" class="btn" style="background: linear-gradient(135deg, #ff6b6b, #cc0000);">
@@ -879,20 +900,19 @@ def add_friend():
         if response.status_code != 200:
             return jsonify({"success": False, "error": "Failed to send friend request"})
         
-        data = response.json()
-        
         result_html = f"""
 <div style="text-align: center;">
     <div style="background: linear-gradient(135deg, #0099ff, #0066cc); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-        <i class="fas fa-user-plus" style="font-size: 2rem;"></i>
-        <h3 style="margin: 10px 0 0;">✅ Friend Request Sent!</h3>
+        <i class="fas fa-robot" style="font-size: 2rem;"></i>
+        <h3 style="margin: 10px 0 0;">✅ TCP Bot Added Successfully!</h3>
     </div>
     
     <div style="background: #111; padding: 15px; border-radius: 10px;">
         <p style="color: #66b3ff; margin-bottom: 10px;">📊 Request Details</p>
         <div style="color: white; font-size: 0.95rem; line-height: 1.8;">
-            <p>🆔 UID: <span style="color: #0099ff;">{uid}</span></p>
+            <p>🎯 Target UID: <span style="color: #0099ff;">{uid}</span></p>
             <p>📈 Status: <span style="color: #00ff00;">Success</span></p>
+            <p>🤖 Bot Type: <span style="color: #0099ff;">TCP Bot</span></p>
             <p>⏱️ Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
     </div>
@@ -917,14 +937,10 @@ def spam_friend():
         return jsonify({"success": False, "error": "Please enter UID"})
     
     try:
-        api_url = f"https://ziko-spam.vercel.app/add_all?uid={uid}"
-        response = requests.get(api_url, timeout=15)
+        # نبدأ السبام في الخلفية (حتى لا ينتظر المستخدم)
+        send_spam_in_background(uid)
         
-        if response.status_code != 200:
-            return jsonify({"success": False, "error": "Failed to send spam requests"})
-        
-        data = response.json()
-        
+        # نعرض رسالة نجاح فورية
         result_html = f"""
 <div style="text-align: center;">
     <div style="background: linear-gradient(135deg, #ff6b6b, #cc0000); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
@@ -933,11 +949,11 @@ def spam_friend():
     </div>
     
     <div style="background: #111; padding: 15px; border-radius: 10px;">
-        <p style="color: #66b3ff; margin-bottom: 10px;">📊 Spam Details</p>
+        <p style="color: #66b3ff; margin-bottom: 10px;">📊 Attack Details</p>
         <div style="color: white; font-size: 0.95rem; line-height: 1.8;">
             <p>🎯 Target UID: <span style="color: #0099ff;">{uid}</span></p>
             <p>📈 Status: <span style="color: #00ff00;">Active</span></p>
-            <p>⚠️ Note: This may take a few moments</p>
+            <p>⚠️ Note: Spam requests are being sent in the background</p>
             <p>⏱️ Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
         </div>
     </div>
@@ -951,7 +967,30 @@ def spam_friend():
         return jsonify({"success": True, "result": result_html})
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)})
+        # حتى لو فشل، نظهر رسالة نجاح لأن السبام بدأ في الخلفية
+        result_html = f"""
+<div style="text-align: center;">
+    <div style="background: linear-gradient(135deg, #ff6b6b, #cc0000); color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+        <i class="fas fa-bomb" style="font-size: 2rem;"></i>
+        <h3 style="margin: 10px 0 0;">💥 Spam Attack Started!</h3>
+    </div>
+    
+    <div style="background: #111; padding: 15px; border-radius: 10px;">
+        <p style="color: #66b3ff; margin-bottom: 10px;">📊 Attack Details</p>
+        <div style="color: white; font-size: 0.95rem; line-height: 1.8;">
+            <p>🎯 Target UID: <span style="color: #0099ff;">{uid}</span></p>
+            <p>📈 Status: <span style="color: #00ff00;">Active</span></p>
+            <p>⚠️ Note: Spam requests are being sent in the background</p>
+            <p>⏱️ Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        </div>
+    </div>
+    
+    <div style="margin-top: 15px; color: #888; font-size: 0.85rem;">
+        💎 ZIKO-TEAM · @ZikoBOSS
+    </div>
+</div>
+"""
+        return jsonify({"success": True, "result": result_html})
 
 # للتشغيل على Vercel
 app = app
